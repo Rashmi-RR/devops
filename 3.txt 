@@ -1,0 +1,12 @@
+url = "https://api-platform-mtls.cib.echonet/it_prod-dynatrace-configuration/v1/managementZones"
+proxies = {
+    "http": "http://ncproxy-ba.uk.net.intra:8080",
+    "https": "http://ncproxy-ba.uk.net.intra:8080"
+}
+response = requests.get(
+    url,
+    headers=headers,
+    cert=(CERT_FILE, KEY_FILE),
+    verify=CA_BUNDLE,
+    proxies=proxies
+)
