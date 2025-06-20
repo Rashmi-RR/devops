@@ -1,0 +1,35 @@
+import requests
+
+API_TOKEN = "aabaBvG3LPG5zgGkCSGJFSqfdTRc"
+CERT_FILE = "D:\\test_uad\\test\\optimus-client-prd-cert.crt"
+KEY_FILE = "D:\\test_uad\\test\\decrypted.key"
+CA_BUNDLE = "D:\\test_uad\\test\\ca_bundle.pem"
+
+URL = "https://api-platform-mtls.cib.echonet/it_prod-dynatrace-configuration/v1/managementZones"
+
+headers = {
+    "Authorization": f"Api-Token {API_TOKEN}",
+    "Content-Type": "application/json"
+}
+
+try:
+    print(f"\n🌐 Sending request to {URL}")
+    print(f"🔐 Cert: {CERT_FILE}, Key: {KEY_FILE}, CA: {CA_BUNDLE}")
+    print(f"📋 Headers: {headers}")
+
+    response = requests.get(
+        URL,
+        headers=headers,
+        cert=(CERT_FILE, KEY_FILE),
+        verify=CA_BUNDLE
+    )
+
+    print("\n🔁 Status Code:", response.status_code)
+    print("📄 Response Text:", response.text)
+    response.raise_for_status()
+    print("✅ Success!")
+
+except requests.exceptions.SSLError as ssl_err:
+    print("❌ SSL Error:", ssl_err)
+except requests.exceptions.RequestException as req_err:
+    print("❌ Request Exception:", req_err)
