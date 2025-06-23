@@ -1,0 +1,36 @@
+from flask import Flask, jsonify, request
+import requests
+
+app = Flask(__name__)
+
+# Dynatrace API Configuration
+DYNATRACE_URL = "https://your-dynatrace-url/api/v2/problems"
+API_TOKEN = "your_actual_dynatrace_token"
+CERT_FILE = "client.crt"
+KEY_FILE = "client.key"
+CA_BUNDLE = "ca_bundle.pem"
+
+@app.route("/dynatrace/problems", methods=["GET"])
+def get_dynatrace_problems():
+    try:
+        headers = {
+            "Authorization": f"Api-Token {API_TOKEN}",
+            "Accept": "application/json"
+        }
+
+        response = requests.get(
+            DYNATRACE_URL,
+            headers=headers,
+            cert=(CERT_FILE, KEY_FILE),
+            verify=CA_BUNDLE
+        )
+
+        return jsonify(response.json()), response.status_code
+
+    except requests.exceptions.SSLError as e:
+        return {"error": f"SSL error: {str(e)}"}, 500
+    except Exception as ex:
+        return {"error": str(ex)}, 500
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5001)
