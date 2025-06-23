@@ -1,0 +1,73 @@
+import requests
+
+API_TOKEN = "HULM7D2ABPFn3mq8uG0x200my4Y1"
+
+CERT_FILE = "C:\\Users\\h59399\\OneDrive\\Desktop\\test_uad\\test\\optimus-client-prd-cert.crt"
+KEY_FILE = "C:\\Users\\h59399\\OneDrive\\Desktop\\test_uad\\test\\decrypted.key"
+CA_BUNDLE = "C:\\Users\\h59399\\OneDrive\\Desktop\\test_uad\\test\\CA_Bundle.pem"
+
+BASE_URL = "https://api-platform-mtls.cib.echonet"
+PROBLEMS_API = "/api/v2/problems"
+
+proxies = {
+    "http": "http://ncproxy-ba.uk.net.intra:8080",
+    "https": "http://ncproxy-ba.uk.net.intra:8080"
+}
+
+headers = {
+    "Authorization": f"Api-Token {API_TOKEN}",
+    "Accept": "application/json"
+}
+
+# Your target management zone IDs and names
+management_zones = {
+    "-7477657382380479576": "3865--TRANSCOM--PRD",
+    "-207494589162854110": "9032--GTMATCH--PRD",
+    "-5376465584847243358": "9917--OPTIMUS--PRD",
+    "-1443473013948730463": "1010--SIERRA--PRD"
+}
+
+try:
+    for zone_id, app_name in management_zones.items():
+        print(f"\n📡 Fetching problems for {app_name} (Zone ID: {zone_id})")
+
+        params = {
+            "managementZoneId": zone_id,
+            "pageSize": 100
+        }
+
+        response = requests.get(
+            f"{BASE_URL}{PROBLEMS_API}",
+            headers=headers,
+            cert=(CERT_FILE, KEY_FILE),
+            verify=CA_BUNDLE,
+            proxies=proxies,
+            params=params
+        )
+
+        print("✅ Status Code:", response.status_code)
+
+        data = response.json()
+
+        problems = data.get("problems", [])
+
+        if not problems:
+            print("✔️ No problems found.")
+        else:
+            for problem in problems:
+                print("🔴 Problem ID:", problem.get("problemId"))
+                print("  Title     :", problem.get("title"))
+                print("  Severity  :", problem.get("severityLevel"))
+                print("  Status    :", problem.get("status"))
+                print("  Impacted  :", problem.get("impactLevel"))
+                print("")
+
+        response.raise_for_status()
+
+    print("\n🎉 Finished pulling problems for all apps!")
+
+except requests.exceptions.SSLError as ssl_err:
+    print("❌ SSL Error:", ssl_err)
+
+except requests.exceptions.RequestException as req_err:
+    print("❌ Request Exception:", req_err)
