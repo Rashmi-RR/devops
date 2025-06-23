@@ -8,7 +8,6 @@ KEY_FILE = "C:\\Users\\h59399\\OneDrive\\Desktop\\test_uad\\test\\decrypted.key"
 
 CA_BUNDLE = "C:\\Users\\h59399\\OneDrive\\Desktop\\test_uad\\test\\CA_Bundle.pem"
 
-# New endpoint to pull problems
 URL = "https://api-platform-mtls.cib.echonet/api/v2/problems"
 
 proxies = {
@@ -16,16 +15,12 @@ proxies = {
     "https": "http://ncproxy-ba.uk.net.intra:8080"
 }
 
-# Fixed header format: must be Api-Token (not Bearer)
 headers = {
     "Authorization": f"Api-Token {API_TOKEN}"
 }
 
-# Sierra's Management Zone ID
-params = {
-    "managementZoneId": "-1443473013948730463",
-    "pageSize": 100
-}
+# This is the management zone ID for SIERRA
+target_zone_id = "-1443473013948730463"
 
 try:
     print(f"\n Sending request to {URL}")
@@ -37,12 +32,19 @@ try:
         headers=headers,
         cert=(CERT_FILE, KEY_FILE),
         verify=CA_BUNDLE,
-        proxies=proxies,
-        params=params
+        proxies=proxies
     )
 
     print("\n Status Code:", response.status_code)
     print(" Response Text:", response.text)
+
+    # Filter only problems from "1010--SIERRA--PRD"
+    problems = response.json().get("problems", [])
+    print("\n Problems in 1010--SIERRA--PRD only:")
+    for prob in problems:
+        zones = prob.get("managementZones", [])
+        if any(z.get("id") == target_zone_id for z in zones):
+            print(prob)
 
     response.raise_for_status()
     print(" Success!")
