@@ -1,36 +1,59 @@
-from flask import Flask, jsonify, request
 import requests
 
-app = Flask(__name__)
+API_TOKEN = "HULM7D2ABPFn3mq8uG0x200my4Y1"
 
-# Dynatrace API Configuration
-DYNATRACE_URL = "https://your-dynatrace-url/api/v2/problems"
-API_TOKEN = "your_actual_dynatrace_token"
-CERT_FILE = "client.crt"
-KEY_FILE = "client.key"
-CA_BUNDLE = "ca_bundle.pem"
+CERT_FILE = "C:\\Users\\h59399\\OneDrive\\Desktop\\test_uad\\test\\optimus-client-prd-cert.crt"
 
-@app.route("/dynatrace/problems", methods=["GET"])
-def get_dynatrace_problems():
-    try:
-        headers = {
-            "Authorization": f"Api-Token {API_TOKEN}",
-            "Accept": "application/json"
-        }
+KEY_FILE = "C:\\Users\\h59399\\OneDrive\\Desktop\\test_uad\\test\\decrypted.key"
 
-        response = requests.get(
-            DYNATRACE_URL,
-            headers=headers,
-            cert=(CERT_FILE, KEY_FILE),
-            verify=CA_BUNDLE
-        )
+CA_BUNDLE = "C:\\Users\\h59399\\OneDrive\\Desktop\\test_uad\\test\\CA_Bundle.pem"
 
-        return jsonify(response.json()), response.status_code
+URL = "https://api-platform-mtls.cib.echonet/it_prod-dynatrace-configuration/v1/managementZones"
 
-    except requests.exceptions.SSLError as e:
-        return {"error": f"SSL error: {str(e)}"}, 500
-    except Exception as ex:
-        return {"error": str(ex)}, 500
+proxies = {
+    "http": "http://ncproxy-ba.uk.net.intra:8080",
+    "https": "http://ncproxy-ba.uk.net.intra:8080"
+}
 
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5001)
+headers = {
+    "Authorization": f"Api-Token {API_TOKEN}"
+}
+
+# Add target apps to filter
+target_apps = [
+    "3865--TRANSCOM--PRD",
+    "9032--GTMATCH--PRD",
+    "9917--OPTIMUS--PRD",
+    "1010--SIERRA--PRD"
+]
+
+try:
+    print(f"\n Sending request to {URL}")
+    print(f" Cert: {CERT_FILE}, Key: {KEY_FILE}, CA: {CA_BUNDLE}")
+    print(f" Headers: {headers}")
+
+    response = requests.get(
+        URL,
+        headers=headers,
+        cert=(CERT_FILE, KEY_FILE),
+        verify=CA_BUNDLE,
+        proxies=proxies
+    )
+
+    print("\n Status Code:", response.status_code)
+    print(" Response Text:", response.text)
+
+    # Filter matching applications
+    print("\n Filtered Applications:")
+    for item in response.json().get("values", []):
+        if item.get("name") in target_apps:
+            print(item)
+
+    response.raise_for_status()
+    print(" Success!")
+
+except requests.exceptions.SSLError as ssl_err:
+    print("X SSL Error:", ssl_err)
+
+except requests.exceptions.RequestException as req_err:
+    print("X Request Exception:", req_err)
