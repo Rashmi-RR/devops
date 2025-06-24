@@ -1,0 +1,84 @@
+import requests
+
+API_TOKEN = "ToTG5UkFsz2GvsMJIABQH31FKG"
+
+CERT_FILE = "C:\\Users\\h59399\\OneDrive\\Desktop\\test_uad\\test\\optimus-client-prd-cert.crt"
+KEY_FILE = "C:\\Users\\h59399\\OneDrive\\Desktop\\test_uad\\test\\decrypted.key"
+CA_BUNDLE = "C:\\Users\\h59399\\OneDrive\\Desktop\\test_uad\\test\\CA_Bundle.pem"
+
+URL_MZONES = "https://api-platform-atls.cib.echonet/it_prod-dynatrace-configuration/v1/managementZones"
+URL_PROBLEMS = "https://api-platform-atls.cib.echonet/api/v2/problems"
+
+proxies = {
+    "http": "http://ncproxy-ba.uk.net.intra:8888",
+    "https": "http://ncproxy-ba.uk.net.intra:8888"
+}
+
+headers = {
+    "Authorization": f"Api-Token {API_TOKEN}",
+    "Content-Type": "application/json"
+}
+
+# Target Applications
+target_apps = {"3865--TRANSCOM--PRD", "9032--GTMATCH--PRD", "9917--OPTIMUS--PRD", "1010--SIERRA--PRD"}
+
+try:
+    print("\nSending request to fetch Management Zones...")
+    response = requests.get(
+        URL_MZONES,
+        headers=headers,
+        cert=(CERT_FILE, KEY_FILE),
+        verify=CA_BUNDLE,
+        proxies=proxies
+    )
+
+    response.raise_for_status()
+    mz_data = response.json()
+    print("\n✅ Successfully fetched management zones.")
+
+    print("\n🔍 Filtering Applications:")
+    filtered_apps = []
+    for item in mz_data.get("values", []):
+        if item.get("name") in target_apps:
+            print(f"- Found: {item['name']} (ID: {item['id']})")
+            filtered_apps.append({"name": item["name"], "id": item["id"]})
+
+    print("\n📥 Fetching Problems for each Management Zone:")
+    for app in filtered_apps:
+        zone_id = app["id"]
+        app_name = app["name"]
+        print(f"\n➡️  Application: {app_name} (Zone ID: {zone_id})")
+
+        # Fetch problems for each management zone
+        problems_url = f"{URL_PROBLEMS}?managementZone={zone_id}"
+
+        prob_response = requests.get(
+            problems_url,
+            headers=headers,
+            cert=(CERT_FILE, KEY_FILE),
+            verify=CA_BUNDLE,
+            proxies=proxies
+        )
+
+        if prob_response.status_code == 200:
+            problems = prob_response.json().get("problems", [])
+            if problems:
+                print(f"   ⚠️ Found {len(problems)} problem(s):")
+                for problem in problems:
+                    print(f"     - Title: {problem.get('title')}")
+                    print(f"       Impacted Entity: {problem.get('impactedEntities', [{}])[0].get('name', 'N/A')}")
+                    print(f"       Status: {problem.get('status')}")
+                    print(f"       Severity: {problem.get('severityLevel')}")
+                    print(f"       Problem ID: {problem.get('problemId')}")
+                    print()
+            else:
+                print("   ✅ No active problems.")
+        else:
+            print(f"   ❌ Failed to fetch problems. Status Code: {prob_response.status_code}")
+            print(f"   Response: {prob_response.text}")
+
+except requests.exceptions.SSLError as ssl_err:
+    print("❌ SSL Error:", ssl_err)
+
+except requests.exceptions.RequestException as req_err:
+    print("❌ Request Exception:", req_err)
