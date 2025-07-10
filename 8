@@ -1,1 +1,162 @@
-https://dynatrace-emea-core-01.cib.echonet/e/ecaf7eb2-8fd2-42fc-b564-e837c60f62c1/api/v2
+Here is a clean, professional PPT structure for your project demo tomorrow:
+
+
+---
+
+Title Slide
+
+Project Name (e.g., Universal Alert Database)
+
+Your Name
+
+Date
+
+
+
+---
+
+1️⃣ Introduction
+
+Purpose: Automate fetching Dynatrace problems and store in PostgreSQL for analytics.
+
+Reduces manual alert tracking.
+
+Supports faster incident management.
+
+
+
+---
+
+2️⃣ Tools & Technologies
+
+Dynatrace (Problem API)
+
+PostgreSQL (Database storage)
+
+Python (Requests, psycopg2)
+
+Postman (API testing)
+
+Windows / CyberArk (Execution environment)
+
+
+
+---
+
+3️⃣ Project Workflow
+
+1️⃣ Fetch problems from Dynatrace using API.
+2️⃣ Filter problems by management zones.
+3️⃣ Insert relevant problem data into PostgreSQL.
+4️⃣ Enable future trend & predictive analysis dashboards.
+
+
+---
+
+4️⃣ Fetching Problems from Dynatrace
+
+Using mTLS and API token for authentication.
+
+REST API call with filtered management zones (Transcom, GTMatch, Optimus, Sierra).
+
+Collected:
+
+Problem ID
+
+Title
+
+Impact Level
+
+Start Time
+
+End Time
+
+Status
+
+
+
+
+---
+
+5️⃣ Storing into PostgreSQL
+
+Designed schema:
+
+problem_id (PK)
+
+title
+
+impact_level
+
+start_time
+
+end_time
+
+status
+
+
+Inserted fetched problems for persistent storage and querying.
+
+
+
+---
+
+6️⃣ Challenges Faced
+
+mTLS certificate handling and path issues.
+
+API 400 Bad Request debugging.
+
+Identifying correct Dynatrace endpoints.
+
+Token handling without UI generation.
+
+SSO & access restrictions while testing APIs.
+
+
+
+---
+
+7️⃣ Current Status
+
+✅ Successfully fetching problems from Dynatrace.
+✅ Storing problems into PostgreSQL automatically.
+✅ Verified correctness with sample queries.
+
+
+---
+
+8️⃣ Next Steps
+
+Create dashboards for trend analysis (Grafana / Power BI).
+
+Automate periodic fetch using cron / Task Scheduler.
+
+Build alert classification and predictive analysis pipeline.
+
+Integrate with monitoring teams for daily operational usage.
+
+
+
+---
+
+9️⃣ Demo Plan (Tomorrow)
+
+Show Python script fetching live problems.
+
+Show insertion into PostgreSQL (select * from problems;).
+
+Demonstrate structure for future dashboards.
+
+
+
+---
+
+10️⃣ Q&A
+
+“Happy to take your questions.”
+
+
+---
+
+If you want, I can generate the complete PPT now with clean slides for your use, ready to present to your manager. Let me know if you want me to generate it directly for you.
