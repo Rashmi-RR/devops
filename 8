@@ -1,162 +1,162 @@
-Here is a clean, professional PPT structure for your project demo tomorrow:
-
-
----
-
-Title Slide
-
-Project Name (e.g., Universal Alert Database)
-
-Your Name
-
-Date
-
-
-
----
-
-1️⃣ Introduction
-
-Purpose: Automate fetching Dynatrace problems and store in PostgreSQL for analytics.
-
-Reduces manual alert tracking.
-
-Supports faster incident management.
-
-
-
----
-
-2️⃣ Tools & Technologies
-
-Dynatrace (Problem API)
-
-PostgreSQL (Database storage)
-
-Python (Requests, psycopg2)
-
-Postman (API testing)
-
-Windows / CyberArk (Execution environment)
-
-
-
----
-
-3️⃣ Project Workflow
-
-1️⃣ Fetch problems from Dynatrace using API.
-2️⃣ Filter problems by management zones.
-3️⃣ Insert relevant problem data into PostgreSQL.
-4️⃣ Enable future trend & predictive analysis dashboards.
-
-
----
-
-4️⃣ Fetching Problems from Dynatrace
-
-Using mTLS and API token for authentication.
-
-REST API call with filtered management zones (Transcom, GTMatch, Optimus, Sierra).
-
-Collected:
-
-Problem ID
-
-Title
-
-Impact Level
-
-Start Time
-
-End Time
-
-Status
-
-
-
-
----
-
-5️⃣ Storing into PostgreSQL
-
-Designed schema:
-
-problem_id (PK)
-
-title
-
-impact_level
-
-start_time
-
-end_time
-
-status
-
-
-Inserted fetched problems for persistent storage and querying.
-
-
-
----
-
-6️⃣ Challenges Faced
-
-mTLS certificate handling and path issues.
-
-API 400 Bad Request debugging.
-
-Identifying correct Dynatrace endpoints.
-
-Token handling without UI generation.
-
-SSO & access restrictions while testing APIs.
-
-
-
----
-
-7️⃣ Current Status
-
-✅ Successfully fetching problems from Dynatrace.
-✅ Storing problems into PostgreSQL automatically.
-✅ Verified correctness with sample queries.
-
-
----
-
-8️⃣ Next Steps
-
-Create dashboards for trend analysis (Grafana / Power BI).
-
-Automate periodic fetch using cron / Task Scheduler.
-
-Build alert classification and predictive analysis pipeline.
-
-Integrate with monitoring teams for daily operational usage.
-
-
-
----
-
-9️⃣ Demo Plan (Tomorrow)
-
-Show Python script fetching live problems.
-
-Show insertion into PostgreSQL (select * from problems;).
-
-Demonstrate structure for future dashboards.
-
-
-
----
-
-10️⃣ Q&A
-
-“Happy to take your questions.”
-
-
----
-
-If you want, I can generate the complete PPT now with clean slides for your use, ready to present to your manager. Let me know if you want me to generate it directly for you.
+import re
+import requests
+import json
+import urllib3
+import datetime
+import bearer_token
+from config.connections import postgresql
+from sqlalchemy import text
+
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+db_con = postgresql()
+
+def convert_timestamp(epoch_time):
+    if epoch_time is None or epoch_time == -1:
+        return datetime.datetime.now()
+    return datetime.datetime.fromtimestamp(epoch_time / 1000.0)
+
+def dump(p_id, title, implevel, sevlevel, status, stime, etime, appname, afenti, tag, fecdate, bam_id, bam_name):
+    afenti_str = json.dumps(afenti) if afenti else None
+    tag_str = json.dumps(tag) if tag else None
+    start_time = convert_timestamp(stime)
+    end_time = convert_timestamp(etime)
+
+    insert_query = '''
+    INSERT INTO public.dynatrace_problems_fetched (
+        problem_id, title, impact_level, severity_level, status,
+        start_time, end_time, app_name, affected_entities, tags,
+        fetched_at, bam_id, bam_name
+    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+    ON CONFLICT (app_name, title, impact_level, start_time) DO NOTHING
+    '''
+
+    values = (
+        p_id, title, implevel, sevlevel, status, start_time, end_time,
+        appname, afenti_str, tag_str, fecdate, bam_id, bam_name
+    )
+
+    try:
+        with db_con.connect() as conn:
+            with conn.begin():
+                conn.execute(text(insert_query), values)
+        print(f"✔ Inserted problem: {p_id}")
+    except Exception as e:
+        print(f"❌ Error inserting problem {p_id}: {str(e)}")
+
+API_TOKEN = bearer_token.bearer_tok()
+
+CERT_FILE = "D:/UAD/Working_code/optimus-client-prd-cert.crt"
+KEY_FILE = "D:/UAD/Working_code/decrypted.key"
+CA_BUNDLE = "D:/UAD/Working_code/CA_Burgle.pem"
+
+ENDPOINT = "https://api-platform-mtls.cib.echonet/it_prod-dynatrace-environment/v2/problems"
+
+proxies = {
+    "http": "http://ncproxy-ba.uk.net.intra:8080",
+    "https": "http://ncproxy-ba.uk.net.intra:8888"
+}
+
+headers = {
+    "Authorization": f"Bearer {API_TOKEN}",
+    "Content-Type": "application/json"
+}
+
+params = {
+    "from": "now-24h",
+    "problemSelector": 'status("open")'
+}
+
+patterns = [
+    r'\d+--(.+?)--PRD',
+    r'\d+--(.+?)--\w+',
+    r'(.+?) certificate'
+]
+
+try:
+    response = requests.get(
+        ENDPOINT,
+        headers=headers,
+        params=params,
+        cert=(CERT_FILE, KEY_FILE),
+        verify=CA_BUNDLE,
+        proxies=proxies,
+        timeout=30
+    )
+
+    print("📡 Final URL:", response.request.url)
+    print("📨 Response Status Code:", response.status_code)
+
+    if response.status_code != 200:
+        print("❌ API Error:", response.text)
+    else:
+        data = response.json()
+        problems = data.get("problems", [])
+        print(f"📋 Total Problems Fetched: {len(problems)}")
+
+        applications = {}
+
+        for p in problems:
+            print("\n🔍 Processing Problem ID:", p.get("problemId"))
+
+            s = p.get('affectedEntities', [{}])[0].get('name', '')
+            app_name = 'Unknown'
+            for pattern in patterns:
+                match = re.search(pattern, s)
+                if match:
+                    app_name = match.group(0) if "certificate" in pattern else match.group(1)
+                    break
+
+            tags = p.get('entityTags', [])
+            affectedEntities = p.get('affectedEntities', [])
+            end_time = p.get('endTime', None)
+
+            bam_id = None
+            bam_name = None
+            for tag in tags:
+                if tag.get('key') == 'BAM--ID':
+                    bam_id = tag.get('value')
+                elif tag.get('key') == 'BAM--NAME':
+                    bam_name = tag.get('value')
+
+            dump(
+                p.get('problemId', 'Unknown'),
+                p.get('title', 'Unknown'),
+                p.get('impactLevel', 'Unknown'),
+                p.get('severityLevel', 'Unknown'),
+                p.get('status', 'Unknown'),
+                p.get('startTime', None),
+                end_time,
+                app_name,
+                affectedEntities,
+                tags,
+                datetime.datetime.now(),
+                bam_id,
+                bam_name
+            )
+
+            # Handle grouping
+            group_id = bam_id or "NULL"
+            group_name = bam_name or "NULL"
+
+            if group_id not in applications:
+                applications[group_id] = {
+                    "bam_name": group_name,
+                    "app_names": set()
+                }
+            applications[group_id]["app_names"].add(app_name)
+
+        # ✅ Final output
+        print("\n📦 Applications Grouped by BAM ID:\n")
+        for bam_id, app_info in applications.items():
+            print(f"🆔 BAM ID: {bam_id}")
+            print(f"📛 BAM Name: {app_info['bam_name']}")
+            print("📲 Applications:")
+            for app in sorted(app_info['app_names']):
+                print(f"   - {app}")
+            print("--------------------------------------------------")
+
+except requests.exceptions.RequestException as e:
+    print("🚨 Request Exception:", e)
+    if hasattr(e, 'response') and e.response is not None:
+        print("🔴 Error Response:", e.response.text)
