@@ -64,7 +64,8 @@ headers = {
 
 params = {
     "from": "now-24h",
-    "problemSelector": 'status("open")'
+    "problemSelector": 'status("open")',
+    "pageSize": 1000  # ✅ fetch more than 50 problems
 }
 
 patterns = [
@@ -91,14 +92,12 @@ try:
         print("❌ API Error:", response.text)
     else:
         data = response.json()
-        problems = data.get("problems", [])
+        problems = data.get("problems", [])  # ✅ now retrieves full set
         print(f"📋 Total Problems Fetched: {len(problems)}")
 
         applications = {}
 
         for p in problems:
-            print("\n🔍 Processing Problem ID:", p.get("problemId"))
-
             s = p.get('affectedEntities', [{}])[0].get('name', '')
             app_name = 'Unknown'
             for pattern in patterns:
@@ -135,7 +134,7 @@ try:
                 bam_name
             )
 
-            # Handle grouping
+            # Group applications
             group_id = bam_id or "NULL"
             group_name = bam_name or "NULL"
 
@@ -156,6 +155,8 @@ try:
                 print(f"   - {app}")
             print("--------------------------------------------------")
 
+except requests.exceptions.ProxyError as e:
+    print("❌ Proxy Error:", e)
 except requests.exceptions.RequestException as e:
     print("🚨 Request Exception:", e)
     if hasattr(e, 'response') and e.response is not None:
