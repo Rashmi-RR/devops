@@ -3,12 +3,14 @@ import requests
 import json
 import urllib3
 import datetime
-import bearer_token
 from config.connections import postgresql
 from sqlalchemy import text
+import bearer_token
 
+# Suppress SSL warnings
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
+# DB connection
 db_con = postgresql()
 
 def convert_timestamp(epoch_time):
@@ -22,39 +24,39 @@ def dump(p_id, title, implevel, sevlevel, status, stime, etime, appname, afenti,
     start_time = convert_timestamp(stime)
     end_time = convert_timestamp(etime)
 
-    insert_query = '''
+    insert_query = """
     INSERT INTO public.dynatrace_problems_fetched (
         problem_id, title, impact_level, severity_level, status,
         start_time, end_time, app_name, affected_entities, tags,
         fetched_at, bam_id, bam_name
     ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
     ON CONFLICT (app_name, title, impact_level, start_time) DO NOTHING
-    '''
-
+    """
     values = (
-        p_id, title, implevel, sevlevel, status, start_time, end_time,
-        appname, afenti_str, tag_str, fecdate, bam_id, bam_name
+        p_id, title, implevel, sevlevel, status,
+        start_time, end_time, appname, afenti_str, tag_str,
+        fecdate, bam_id, bam_name
     )
 
     try:
         with db_con.connect() as conn:
             with conn.begin():
                 conn.execute(text(insert_query), values)
-        print(f"✔ Inserted problem: {p_id}")
+                print(f"✅ Inserted problem: {p_id}")
     except Exception as e:
         print(f"❌ Error inserting problem {p_id}: {str(e)}")
 
+# API auth and cert setup
 API_TOKEN = bearer_token.bearer_tok()
-
-CERT_FILE = "D:/UAD/Working_code/optimus-client-prd-cert.crt"
-KEY_FILE = "D:/UAD/Working_code/decrypted.key"
-CA_BUNDLE = "D:/UAD/Working_code/CA_Burgle.pem"
+CERT_FILE = r"D:\UAD\Working_code\optimus-client-prd-cert.crt"
+KEY_FILE = r"D:\UAD\Working_code\decrypted.key"
+CA_BUNDLE = r"D:\UAD\Working_code\CA_Bundle.pem"
 
 ENDPOINT = "https://api-platform-mtls.cib.echonet/it_prod-dynatrace-environment/v2/problems"
 
 proxies = {
     "http": "http://ncproxy-ba.uk.net.intra:8080",
-    "https": "http://ncproxy-ba.uk.net.intra:8888"
+    "https": "http://ncproxy-ba.uk.net.intra:8080"
 }
 
 headers = {
@@ -64,8 +66,8 @@ headers = {
 
 params = {
     "from": "now-24h",
-    "problemSelector": 'status("open")',
-    "pageSize": 1000  # ✅ fetch more than 50 problems
+    "pageSize": 1000,  # Increase the number of problems returned
+    "problemSelector": 'status("open")'
 }
 
 patterns = [
@@ -85,21 +87,23 @@ try:
         timeout=30
     )
 
-    print("📡 Final URL:", response.request.url)
-    print("📨 Response Status Code:", response.status_code)
+    print("🔗 Final URL:", response.request.url)
+    print("🔍 Response Status Code:", response.status_code)
 
     if response.status_code != 200:
         print("❌ API Error:", response.text)
     else:
         data = response.json()
-        problems = data.get("problems", [])  # ✅ now retrieves full set
-        print(f"📋 Total Problems Fetched: {len(problems)}")
+        problems = data.get("problems", [])
+        print(f"✅ Total Problems Fetched: {len(problems)}")
 
         applications = {}
 
         for p in problems:
+            print(f"\n⚙️ Processing Problem ID: {p.get('problemId')}")
             s = p.get('affectedEntities', [{}])[0].get('name', '')
-            app_name = 'Unknown'
+            app_name = "Unknown"
+
             for pattern in patterns:
                 match = re.search(pattern, s)
                 if match:
@@ -112,6 +116,7 @@ try:
 
             bam_id = None
             bam_name = None
+
             for tag in tags:
                 if tag.get('key') == 'BAM--ID':
                     bam_id = tag.get('value')
@@ -134,7 +139,7 @@ try:
                 bam_name
             )
 
-            # Group applications
+            # Group apps by BAM ID
             group_id = bam_id or "NULL"
             group_name = bam_name or "NULL"
 
@@ -143,9 +148,10 @@ try:
                     "bam_name": group_name,
                     "app_names": set()
                 }
+
             applications[group_id]["app_names"].add(app_name)
 
-        # ✅ Final output
+        # ✅ Print summary of all applications per BAM
         print("\n📦 Applications Grouped by BAM ID:\n")
         for bam_id, app_info in applications.items():
             print(f"🆔 BAM ID: {bam_id}")
@@ -155,9 +161,7 @@ try:
                 print(f"   - {app}")
             print("--------------------------------------------------")
 
-except requests.exceptions.ProxyError as e:
-    print("❌ Proxy Error:", e)
 except requests.exceptions.RequestException as e:
-    print("🚨 Request Exception:", e)
+    print("❌ Request Exception:", e)
     if hasattr(e, 'response') and e.response is not None:
-        print("🔴 Error Response:", e.response.text)
+        print("Error Response:", e.response.text)
