@@ -1,129 +1,119 @@
 #!/bin/bash
-# ====================================================================
-# Script: Fileshares Archival
-# Purpose: Archive files older than 10 days without duplicates
-# Author: (fixed version with duplicate removal)
-# ====================================================================
 
-# ------------------------
+# =============================
 # Variables
-# ------------------------
-BASE=/apps/shares/fiin_transfer
-COMMON_PATH=/data/ape_scripts/archival_scripts/apps_shares_files_transfer_archive
-DEST=/apps/posttrade/archives/apps_shares_files_transfer
-INTER_PATH=$COMMON_PATH/intermediate_data/Archival_Files
-SCRIPT=$COMMON_PATH/script
-LOG=$SCRIPT/logs
+# =============================
+SBASE="/RASE/apps/sharos/fiin_transfer"
+SCOMMON_PATH="/data/ape_scripts/archival_scripts/apps_shares_files_transfer_archive"
+SDEST="/apps/posttrade/archives/appe_shares_files_transfer"
+SINTER_PATH="/data/aps_scripts/archival_scripts/apps_shares_files_transfer_archive/intermediate_data"
+SSCRIPT="/data/ape_scripts/archival_scripts/appe_shares_files_transfer_archive/script"
+SLOG="$SSCRIPT/logs"
 
-curr_date=$(date '+%Y%m%d')
-logfile="$LOG/FilesharesArchival_$curr_date.log"
+curr_date=$(date '+%Y-%m-%d_%H%M%S')
 
-# ------------------------
-# Ensure directories exist
-# ------------------------
-if [ ! -d "$BASE" ]; then
-  echo "Directory does not exist: $BASE" >> "$logfile"
+# =============================
+# Check if the base directory exists
+# =============================
+if [ ! -d "$SBASE" ]; then
+  echo "Directory does not exist: $SBASE" >> "$SLOG/FilesharesArchival_$curr_date.log"
   exit 1
 fi
 
-mkdir -p "$INTER_PATH"
-mkdir -p "$LOG"
+# =============================
+# Create intermediate directories if missing
+# =============================
+[ ! -d "$SINTER_PATH" ] && mkdir -p "$SINTER_PATH"
+[ ! -d "$SLOG" ] && mkdir -p "$SLOG"
 
-# ------------------------
-# Inclusion File
-# ------------------------
-INCLUSION_FILE=$SCRIPT/inclusion_file.txt
-if [ ! -f "$INCLUSION_FILE" ]; then
-  echo "Inclusion file not found: $INCLUSION_FILE" >> "$logfile"
-  exit 1
-fi
+# =============================
+# Change to the intermediate path
+# =============================
+cd "$SINTER_PATH" || exit 1
 
-echo "Inclusion file: $INCLUSION_FILE" >> "$logfile"
+# =============================
+# Find files to archive (older than 10 days)
+# =============================
+find "$SBASE" -type f -mtime +10 > "$SBASE/ArchiveFilesList_$curr_date.txt"
 
-# ------------------------
-# Find files older than 10 days
-# ------------------------
-find $(cat "$INCLUSION_FILE") -maxdepth 1 -type f -mtime +10 > "$BASE/ArchiveFilesList_$curr_date.txt"
-archive_file_count=$(wc -l < "$BASE/ArchiveFilesList_$curr_date.txt")
+echo "Start of archiving process" > "$SLOG/FilesharesArchival_$curr_date.log"
 
-echo "Start of archiving process" >> "$logfile"
-echo "Archive file count: $archive_file_count" >> "$logfile"
+archive_file_count=$(wc -l < "$SBASE/ArchiveFilesList_$curr_date.txt")
 
-# ------------------------
-# Process files by month
-# ------------------------
-while read filepath; do
-  filename=$(basename "$filepath")
-  filemonth=$(echo "$filename" | grep -Eo '[0-9]{6}' | head -1)  # YYYYMM format
-  
-  if [ -n "$filemonth" ]; then
-    echo "$filepath" >> "$INTER_PATH/${filemonth}_files.txt"
-  fi
-done < "$BASE/ArchiveFilesList_$curr_date.txt"
+# =============================
+# Process files and remove duplicates
+# =============================
+while read -r file; do
+  filename=$(basename "$file")
+  filemonth=$(echo "$filename" | grep -Eo '[0-9]{6}')
+  echo "$file" >> "$SINTER_PATH/${filemonth}_files.txt"
+done < "$SBASE/ArchiveFilesList_$curr_date.txt"
 
-# ------------------------
-# Remove duplicates & Archive
-# ------------------------
-for filelist in "$INTER_PATH"/*_files.txt; do
-  filemonth=$(basename "$filelist" | cut -d'_' -f1)
-
-  echo "$(date '+%Y-%m-%d %H:%M:%S') Archiving $filelist" >> "$logfile"
-
-  # Temp lists
-  existing_files="$INTER_PATH/${filemonth}_existing.txt"
-  duplicates="$INTER_PATH/${filemonth}_duplicates.txt"
-  newfiles="$INTER_PATH/${filemonth}_newfiles.txt"
-  finalfiles="$INTER_PATH/${filemonth}_finalfiles.txt"
-
-  # If archive already exists, extract existing file list
-  if [ -f "$DEST/Archive_${filemonth}.tar.gz" ]; then
-    gunzip -c "$DEST/Archive_${filemonth}.tar.gz" | tar tf - > "$existing_files"
-  else
-    > "$existing_files"
-  fi
-
-  > "$duplicates"
-  > "$newfiles"
-
-  # Separate new vs duplicate
-  while read f; do
-    fname=$(basename "$f")
-    if grep -q "$fname" "$existing_files"; then
-      echo "$f" >> "$duplicates"
-    else
-      echo "$f" >> "$newfiles"
-    fi
-  done < "$filelist"
-
-  # ✅ FIX: Deduplicate final list
-  cat "$existing_files" "$newfiles" | sort -u > "$finalfiles"
-
-  echo "Existing files: $(wc -l < "$existing_files")" >> "$logfile"
-  echo "New files: $(wc -l < "$newfiles")" >> "$logfile"
-  echo "Duplicates: $(wc -l < "$duplicates")" >> "$logfile"
-  echo "Final files: $(wc -l < "$finalfiles")" >> "$logfile"
-
-  # Create new archive with only unique files
-  tar -cf "$DEST/Archive_${filemonth}.tar" -T "$finalfiles"
-  gzip -f "$DEST/Archive_${filemonth}.tar"
-
-  echo "No. of files archived: $(wc -l < "$finalfiles")" >> "$logfile"
+# =============================
+# Deduplicate intermediate files
+# =============================
+for f in "$SINTER_PATH"/*_files.txt; do
+  # ✅ Keep only unique entries (remove duplicates, preserve order)
+  awk '!seen[$0]++' "$f" > "${f}.dedup"
+  mv "${f}.dedup" "$f"
 done
 
-# ------------------------
-# Validation - total counts
-# ------------------------
+# =============================
+# Archive by month
+# =============================
+for f in "$SINTER_PATH"/*_files.txt; do
+  filemonth=$(basename "$f" | grep -Eo '[0-9]{6}')
+  tarfile="$SDEST/Archive_${filemonth}.tar.gz"
+
+  if [ -f "$tarfile" ]; then
+    echo "$(date '+%Y-%m-%d %H:%M:%S') Checking for duplicates in $tarfile" >> "$SLOG/FilesharesArchival_$curr_date.log"
+
+    gunzip "$tarfile"
+    tarfile_unzipped="${tarfile%.gz}"
+    tar tf "$tarfile_unzipped" | sort | uniq > existing_files.txt
+    gzip "$tarfile_unzipped"
+
+    # Find duplicates
+    while read -r line; do
+      if grep -q "$line" existing_files.txt; then
+        echo "$line" >> duplicate_files.txt
+      fi
+    done < "$f"
+
+    # ✅ Remove duplicates from $f
+    grep -vxF -f duplicate_files.txt "$f" > temp && mv temp "$f"
+  fi
+
+  # =============================
+  # Final file list (unique only)
+  # =============================
+  cat "$f" | sort | uniq > final_files.txt
+
+  # =============================
+  # Archive unique files
+  # =============================
+  if [ -s final_files.txt ]; then
+    tar -rvf "${tarfile%.gz}" -T final_files.txt
+    gzip -f "${tarfile%.gz}"
+  fi
+
+  rm -f existing_files.txt duplicate_files.txt final_files.txt
+done
+
+# =============================
+# Count validation
+# =============================
 total_count=0
-for tarfile in "$DEST"/*.tar.gz; do
+for tarfile in "$SDEST"/*.tar.gz; do
   count=$(tar -tzf "$tarfile" | wc -l)
   total_count=$((total_count + count))
 done
 
-echo "Total files in all archives: $total_count" >> "$logfile"
-echo "Total files in ArchiveFilesList: $archive_file_count" >> "$logfile"
+echo "Total files in all archives: $total_count" >> "$SLOG/FilesharesArchival_$curr_date.log"
+echo "Total files in ArchiveFilesList: $archive_file_count" >> "$SLOG/FilesharesArchival_$curr_date.log"
 
 if [ "$total_count" -eq "$archive_file_count" ]; then
-  echo "File counts match: Archival process successful" >> "$logfile"
+  echo "File counts match: Archival process successful" >> "$SLOG/FilesharesArchival_$curr_date.log"
 else
-  echo "File count mismatch: Archival process may have issues" >> "$logfile"
+  echo "File count mismatch: Archival process may have issues" >> "$SLOG/FilesharesArchival_$curr_date.log"
 fi
