@@ -1,1 +1,129 @@
-.
+#!/bin/bash
+# ====================================================================
+# Script: Fileshares Archival
+# Purpose: Archive files older than 10 days without duplicates
+# Author: (fixed version with duplicate removal)
+# ====================================================================
+
+# ------------------------
+# Variables
+# ------------------------
+BASE=/apps/shares/fiin_transfer
+COMMON_PATH=/data/ape_scripts/archival_scripts/apps_shares_files_transfer_archive
+DEST=/apps/posttrade/archives/apps_shares_files_transfer
+INTER_PATH=$COMMON_PATH/intermediate_data/Archival_Files
+SCRIPT=$COMMON_PATH/script
+LOG=$SCRIPT/logs
+
+curr_date=$(date '+%Y%m%d')
+logfile="$LOG/FilesharesArchival_$curr_date.log"
+
+# ------------------------
+# Ensure directories exist
+# ------------------------
+if [ ! -d "$BASE" ]; then
+  echo "Directory does not exist: $BASE" >> "$logfile"
+  exit 1
+fi
+
+mkdir -p "$INTER_PATH"
+mkdir -p "$LOG"
+
+# ------------------------
+# Inclusion File
+# ------------------------
+INCLUSION_FILE=$SCRIPT/inclusion_file.txt
+if [ ! -f "$INCLUSION_FILE" ]; then
+  echo "Inclusion file not found: $INCLUSION_FILE" >> "$logfile"
+  exit 1
+fi
+
+echo "Inclusion file: $INCLUSION_FILE" >> "$logfile"
+
+# ------------------------
+# Find files older than 10 days
+# ------------------------
+find $(cat "$INCLUSION_FILE") -maxdepth 1 -type f -mtime +10 > "$BASE/ArchiveFilesList_$curr_date.txt"
+archive_file_count=$(wc -l < "$BASE/ArchiveFilesList_$curr_date.txt")
+
+echo "Start of archiving process" >> "$logfile"
+echo "Archive file count: $archive_file_count" >> "$logfile"
+
+# ------------------------
+# Process files by month
+# ------------------------
+while read filepath; do
+  filename=$(basename "$filepath")
+  filemonth=$(echo "$filename" | grep -Eo '[0-9]{6}' | head -1)  # YYYYMM format
+  
+  if [ -n "$filemonth" ]; then
+    echo "$filepath" >> "$INTER_PATH/${filemonth}_files.txt"
+  fi
+done < "$BASE/ArchiveFilesList_$curr_date.txt"
+
+# ------------------------
+# Remove duplicates & Archive
+# ------------------------
+for filelist in "$INTER_PATH"/*_files.txt; do
+  filemonth=$(basename "$filelist" | cut -d'_' -f1)
+
+  echo "$(date '+%Y-%m-%d %H:%M:%S') Archiving $filelist" >> "$logfile"
+
+  # Temp lists
+  existing_files="$INTER_PATH/${filemonth}_existing.txt"
+  duplicates="$INTER_PATH/${filemonth}_duplicates.txt"
+  newfiles="$INTER_PATH/${filemonth}_newfiles.txt"
+  finalfiles="$INTER_PATH/${filemonth}_finalfiles.txt"
+
+  # If archive already exists, extract existing file list
+  if [ -f "$DEST/Archive_${filemonth}.tar.gz" ]; then
+    gunzip -c "$DEST/Archive_${filemonth}.tar.gz" | tar tf - > "$existing_files"
+  else
+    > "$existing_files"
+  fi
+
+  > "$duplicates"
+  > "$newfiles"
+
+  # Separate new vs duplicate
+  while read f; do
+    fname=$(basename "$f")
+    if grep -q "$fname" "$existing_files"; then
+      echo "$f" >> "$duplicates"
+    else
+      echo "$f" >> "$newfiles"
+    fi
+  done < "$filelist"
+
+  # ✅ FIX: Deduplicate final list
+  cat "$existing_files" "$newfiles" | sort -u > "$finalfiles"
+
+  echo "Existing files: $(wc -l < "$existing_files")" >> "$logfile"
+  echo "New files: $(wc -l < "$newfiles")" >> "$logfile"
+  echo "Duplicates: $(wc -l < "$duplicates")" >> "$logfile"
+  echo "Final files: $(wc -l < "$finalfiles")" >> "$logfile"
+
+  # Create new archive with only unique files
+  tar -cf "$DEST/Archive_${filemonth}.tar" -T "$finalfiles"
+  gzip -f "$DEST/Archive_${filemonth}.tar"
+
+  echo "No. of files archived: $(wc -l < "$finalfiles")" >> "$logfile"
+done
+
+# ------------------------
+# Validation - total counts
+# ------------------------
+total_count=0
+for tarfile in "$DEST"/*.tar.gz; do
+  count=$(tar -tzf "$tarfile" | wc -l)
+  total_count=$((total_count + count))
+done
+
+echo "Total files in all archives: $total_count" >> "$logfile"
+echo "Total files in ArchiveFilesList: $archive_file_count" >> "$logfile"
+
+if [ "$total_count" -eq "$archive_file_count" ]; then
+  echo "File counts match: Archival process successful" >> "$logfile"
+else
+  echo "File count mismatch: Archival process may have issues" >> "$logfile"
+fi
